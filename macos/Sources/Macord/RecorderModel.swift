@@ -46,10 +46,20 @@ final class RecorderModel: ObservableObject {
     @Published var isRecording = false
     @Published var permissionMessage: String?
     @Published var lastOutputURL: URL?
+    @Published var previewImage: CGImage?
+    @Published var isPreparing = false
 
     private var displays: [SCDisplay] = []
     private let captureEngine = CaptureEngine()
     private var rustBridge: RustRecorderBridge?
+
+    init() {
+        captureEngine.onPreviewImage = { [weak self] image in
+            Task { @MainActor in
+                self?.previewImage = image
+            }
+        }
+    }
 
     var selectedSource: CaptureSource? {
         sources.first { $0.id == selectedSourceID }
@@ -73,10 +83,38 @@ final class RecorderModel: ObservableObject {
         }
     }
 
+    func initializeCapture() async {
+        await loadSources()
+        await requestCameraAccess()
+        await requestMicrophoneAccess()
+        await prepareCapture()
+    }
+
+    func prepareCapture() async {
+        guard !isRecording,
+              let selectedSourceID,
+              let display = displays.first(where: { String($0.displayID) == selectedSourceID }) else { return }
+        isPreparing = true
+        defer { isPreparing = false }
+        do {
+            try await captureEngine.prepare(
+                display: display,
+                resolution: resolution,
+                fps: fps,
+                cameraEnabled: cameraEnabled,
+                microphoneEnabled: microphoneEnabled,
+                systemAudioEnabled: systemAudioEnabled,
+                cameraPosition: cameraPosition
+            )
+        } catch {
+            permissionMessage = error.localizedDescription
+        }
+    }
+
     func toggleRecording() async {
         if isRecording {
             do {
-                try await captureEngine.stop()
+                try await captureEngine.stopRecording()
                 _ = rustBridge?.end()
                 rustBridge = nil
                 isRecording = false
@@ -89,6 +127,12 @@ final class RecorderModel: ObservableObject {
         guard let selectedSourceID,
               let display = displays.first(where: { String($0.displayID) == selectedSourceID }) else {
             permissionMessage = "Select a display before recording."
+            return
+        }
+
+        await prepareCapture()
+        guard captureEngine.isPrepared else {
+            permissionMessage = "Capture is still initializing."
             return
         }
 

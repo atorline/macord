@@ -13,11 +13,13 @@ struct RecorderView: View {
                 controls
             }
         }
-        .task {
-            await model.loadSources()
-            await model.requestCameraAccess()
-            await model.requestMicrophoneAccess()
-        }
+        .task { await model.initializeCapture() }
+        .onChange(of: model.selectedSourceID) { _ in Task { await model.prepareCapture() } }
+        .onChange(of: model.resolution) { _ in Task { await model.prepareCapture() } }
+        .onChange(of: model.fps) { _ in Task { await model.prepareCapture() } }
+        .onChange(of: model.cameraEnabled) { _ in Task { await model.prepareCapture() } }
+        .onChange(of: model.microphoneEnabled) { _ in Task { await model.prepareCapture() } }
+        .onChange(of: model.systemAudioEnabled) { _ in Task { await model.prepareCapture() } }
         .alert("Macord", isPresented: Binding(get: { model.permissionMessage != nil }, set: { if !$0 { model.permissionMessage = nil } })) {
             Button("OK", role: .cancel) { model.permissionMessage = nil }
         } message: {
@@ -49,9 +51,15 @@ struct RecorderView: View {
 
     private var preview: some View {
         ZStack(alignment: .bottomTrailing) {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.black.opacity(0.92))
-                .overlay {
+            if let previewImage = model.previewImage {
+                Image(decorative: previewImage, scale: 1, orientation: .up)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.black.opacity(0.92))
+                    .overlay {
                     VStack(spacing: 10) {
                         Image(systemName: "rectangle.dashed.badge.record")
                             .font(.system(size: 34, weight: .light))
@@ -63,24 +71,14 @@ struct RecorderView: View {
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundStyle(.white.opacity(0.45))
                     }
-                }
-                .aspectRatio(16 / 10, contentMode: .fit)
+                    }
+                    .aspectRatio(16 / 10, contentMode: .fit)
+            }
 
-            if model.cameraEnabled {
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(Color.white.opacity(0.12))
-                    .frame(width: 132, height: 86)
-                    .overlay {
-                        Image(systemName: "video.fill")
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .overlay(alignment: .bottomLeading) {
-                        Text("CAM")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.7))
-                            .padding(8)
-                    }
-                    .padding(14)
+            if model.isPreparing {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(12)
             }
         }
         .padding(24)
