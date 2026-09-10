@@ -1,0 +1,11 @@
+[package]
+name = "macord-ffi"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["staticlib", "cdylib"]
+
+[dependencies]
+macord-config = { path = "../config" }
+macord-core = { path = "../core" }

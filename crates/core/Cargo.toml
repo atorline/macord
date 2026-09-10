@@ -1,0 +1,7 @@
+[package]
+name = "macord-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+macord-config = { path = "../config" }
