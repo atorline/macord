@@ -67,6 +67,7 @@ final class RustRecorderBridge: @unchecked Sendable {
     static func make(config: RustRecordingConfig) -> RustRecorderBridge? {
         let root = FileManager.default.currentDirectoryPath
         let candidates = [
+            Bundle.main.bundleURL.appendingPathComponent("Contents/Frameworks/libmacord_ffi.dylib").path,
             "\(root)/target/debug/libmacord_ffi.dylib",
             "\(root)/target/release/libmacord_ffi.dylib"
         ]
