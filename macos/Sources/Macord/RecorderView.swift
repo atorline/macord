@@ -16,6 +16,7 @@ struct RecorderView: View {
         .task {
             await model.loadSources()
             await model.requestCameraAccess()
+            await model.requestMicrophoneAccess()
         }
         .alert("Macord", isPresented: Binding(get: { model.permissionMessage != nil }, set: { if !$0 { model.permissionMessage = nil } })) {
             Button("OK", role: .cancel) { model.permissionMessage = nil }
@@ -140,8 +141,7 @@ struct RecorderView: View {
                 SectionBlock(title: "Audio") {
                     Toggle("Microphone", isOn: $model.microphoneEnabled)
                     Toggle("System audio", isOn: $model.systemAudioEnabled)
-                        .disabled(true)
-                    Text("System audio capture will be available after the microphone path.")
+                    Text("Captures audio from other apps through ScreenCaptureKit.")
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                 }

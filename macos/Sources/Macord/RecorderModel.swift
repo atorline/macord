@@ -99,15 +99,29 @@ final class RecorderModel: ObservableObject {
             microphoneEnabled: microphoneEnabled ? 1 : 0,
             systemAudioEnabled: systemAudioEnabled ? 1 : 0
         )
-        rustBridge = RustRecorderBridge.make(config: rustConfig)
-        if let rustBridge, !rustBridge.begin() {
+        guard let bridge = RustRecorderBridge.make(config: rustConfig) else {
+            permissionMessage = "Rust engine library not found. Run the app through make run."
+            return
+        }
+        guard bridge.begin() else {
             self.rustBridge = nil
             permissionMessage = "Rust recorder could not enter the recording state."
             return
         }
+        rustBridge = bridge
 
         do {
-            lastOutputURL = try await captureEngine.start(display: display, resolution: resolution, fps: fps, codec: codec)
+            lastOutputURL = try await captureEngine.start(
+                display: display,
+                resolution: resolution,
+                fps: fps,
+                codec: codec,
+                cameraEnabled: cameraEnabled,
+                microphoneEnabled: microphoneEnabled,
+                systemAudioEnabled: systemAudioEnabled,
+                cameraPosition: cameraPosition,
+                rustBridge: rustBridge
+            )
             rustBridge?.mark()
             isRecording = true
         } catch {
@@ -129,5 +143,10 @@ final class RecorderModel: ObservableObject {
     func requestCameraAccess() async {
         guard AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined else { return }
         _ = await AVCaptureDevice.requestAccess(for: .video)
+    }
+
+    func requestMicrophoneAccess() async {
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined else { return }
+        _ = await AVCaptureDevice.requestAccess(for: .audio)
     }
 }
