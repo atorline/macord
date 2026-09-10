@@ -31,6 +31,13 @@ enum CameraPosition: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum StressProfile: String {
+    case easy
+    case normal
+    case medium
+    case extreme
+}
+
 @MainActor
 final class RecorderModel: ObservableObject {
     @Published var sources: [CaptureSource] = []
@@ -48,17 +55,59 @@ final class RecorderModel: ObservableObject {
     @Published var lastOutputURL: URL?
     @Published var previewImage: CGImage?
     @Published var isPreparing = false
+    @Published var resourceMetrics = ResourceMetrics()
+    let stressProfile: StressProfile?
 
     private var displays: [SCDisplay] = []
     private let captureEngine = CaptureEngine()
     private var rustBridge: RustRecorderBridge?
+    private let resourceMonitor = ResourceMonitor()
+    private var metricsTask: Task<Void, Never>?
 
     init() {
+        stressProfile = Self.commandLineStressProfile()
+        switch stressProfile {
+        case .easy:
+            resolution = .source
+            fps = 30
+            codec = "H.264"
+            cameraEnabled = false
+            microphoneEnabled = false
+            systemAudioEnabled = false
+        case .normal:
+            resolution = .p1080
+            fps = 60
+            codec = "H.264"
+        case .medium:
+            resolution = .p1440
+            fps = 60
+            codec = "HEVC"
+            systemAudioEnabled = true
+        case .extreme:
+            resolution = .p2160
+            fps = 120
+            codec = "HEVC"
+            cameraEnabled = true
+            microphoneEnabled = true
+            systemAudioEnabled = true
+        case .none:
+            break
+        }
         captureEngine.onPreviewImage = { [weak self] image in
             Task { @MainActor in
                 self?.previewImage = image
+                self?.resourceMonitor.recordPreviewFrame()
             }
         }
+        resourceMonitor.onMetrics = { [weak self] metrics in
+            self?.resourceMetrics = metrics
+        }
+    }
+
+    private static func commandLineStressProfile() -> StressProfile? {
+        guard let index = CommandLine.arguments.firstIndex(of: "--stress-profile"),
+              index + 1 < CommandLine.arguments.count else { return nil }
+        return StressProfile(rawValue: CommandLine.arguments[index + 1])
     }
 
     var selectedSource: CaptureSource? {
@@ -84,10 +133,23 @@ final class RecorderModel: ObservableObject {
     }
 
     func initializeCapture() async {
+        resourceMonitor.start()
+        startMetricsTask()
         await loadSources()
         await requestCameraAccess()
         await requestMicrophoneAccess()
         await prepareCapture()
+    }
+
+    private func startMetricsTask() {
+        metricsTask?.cancel()
+        metricsTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, let self else { return }
+                self.resourceMonitor.updateRustStats(self.rustBridge?.stats(), fileURL: self.lastOutputURL)
+            }
+        }
     }
 
     func prepareCapture() async {
@@ -117,6 +179,7 @@ final class RecorderModel: ObservableObject {
                 try await captureEngine.stopRecording()
                 _ = rustBridge?.end()
                 rustBridge = nil
+                resourceMonitor.endRecording()
                 isRecording = false
             } catch {
                 permissionMessage = error.localizedDescription
@@ -167,6 +230,7 @@ final class RecorderModel: ObservableObject {
                 rustBridge: rustBridge
             )
             rustBridge?.mark()
+            resourceMonitor.beginRecording(bitrateBitsPerSecond: encoderBitrate)
             isRecording = true
         } catch {
             rustBridge = nil
@@ -182,6 +246,25 @@ final class RecorderModel: ObservableObject {
         case .p1440: return 3
         case .p2160: return 4
         }
+    }
+
+    private var encoderBitrate: Int {
+        let source = selectedSource
+        let width: Int
+        let height: Int
+        switch resolution {
+        case .source:
+            width = source?.width ?? 1920
+            height = source?.height ?? 1080
+        case .p720: width = 1280; height = 720
+        case .p1080: width = 1920; height = 1080
+        case .p1440: width = 2560; height = 1440
+        case .p2160: width = 3840; height = 2160
+        }
+        let videoBitrate = max(4_000_000, min(24_000_000, width * height * fps / 20))
+        let microphoneBitrate = microphoneEnabled ? 128_000 : 0
+        let systemAudioBitrate = systemAudioEnabled ? 192_000 : 0
+        return videoBitrate + microphoneBitrate + systemAudioBitrate
     }
 
     func requestCameraAccess() async {

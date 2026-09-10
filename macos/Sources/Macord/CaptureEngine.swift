@@ -259,7 +259,7 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
     }
 
     private func bitrate(width: Int, height: Int, fps: Int) -> Int {
-        max(4_000_000, min(45_000_000, width * height * fps / 12))
+        max(4_000_000, min(24_000_000, width * height * fps / 20))
     }
 
     private func timestampNanoseconds(_ sampleBuffer: CMSampleBuffer) -> Int64 {

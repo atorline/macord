@@ -3,7 +3,7 @@ SHELL := /bin/zsh
 RUST_TARGETS := x86_64-apple-darwin aarch64-apple-darwin
 RUST_CRATE := macord-ffi
 
-.PHONY: all build test check run fmt lint clean rust-build swift-build universal
+.PHONY: all build test check run stress-test fmt lint clean rust-build swift-build universal
 
 all: check
 
@@ -22,6 +22,9 @@ swift-build:
 
 run: rust-build
 	swift run
+
+stress-test:
+	./scripts/stress-test.zsh $(STRESS_ARGS)
 
 fmt:
 	cargo fmt --all

@@ -144,6 +144,17 @@ struct RecorderView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                SectionBlock(title: "Performance") {
+                    MetricRow(label: "CPU", value: String(format: "%.1f%%", model.resourceMetrics.cpuPercent))
+                    MetricRow(label: "RAM", value: String(format: "%.1f MB", model.resourceMetrics.memoryMB))
+                    MetricRow(label: "GPU memory", value: model.resourceMetrics.gpuStatus)
+                    MetricRow(label: "Preview", value: String(format: "%.1f FPS", model.resourceMetrics.previewFPS))
+                    MetricRow(label: "Dropped video", value: "\(model.resourceMetrics.droppedVideoFrames)")
+                    MetricRow(label: "Dropped audio", value: "\(model.resourceMetrics.droppedAudioFrames)")
+                    MetricRow(label: "File", value: String(format: "%.2f MB", model.resourceMetrics.fileSizeMB))
+                    MetricRow(label: "Est. / min", value: String(format: "%.1f MB", model.resourceMetrics.estimatedSizeMBPerMinute))
+                }
+
                 Button {
                     Task { await model.toggleRecording() }
                 } label: {
@@ -186,6 +197,22 @@ private struct PickerRow<Content: View>: View {
             content
                 .labelsHidden()
                 .frame(maxWidth: 170)
+        }
+    }
+}
+
+private struct MetricRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
         }
     }
 }
